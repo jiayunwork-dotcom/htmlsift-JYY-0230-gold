@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>htmlsift - HTML Sanitize &amp; Parse</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .tab { padding: 10px 20px; border: none; background: #ddd; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 14px; }
+        .tab.active { background: #fff; font-weight: bold; }
+        .panel { display: none; background: #fff; border-radius: 0 8px 8px 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .panel.active { display: block; }
+        textarea { width: 100%; height: 180px; font-family: monospace; font-size: 13px; padding: 12px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
+        button.submit { margin-top: 12px; padding: 10px 24px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button.submit:hover { background: #2980b9; }
+        .result { margin-top: 16px; background: #f9f9f9; border: 1px solid #eee; border-radius: 4px; padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 13px; max-height: 400px; overflow: auto; }
+        .error { color: #e74c3c; }
+        label { display: block; margin-bottom: 6px; font-weight: 500; }
+        .field { margin-bottom: 12px; }
+        input[type="text"] { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>htmlsift</h1>
+        <div class="tabs">
+            <button class="tab active" data-panel="sanitize">Sanitize</button>
+            <button class="tab" data-panel="parse">Parse</button>
+            <button class="tab" data-panel="links">Links</button>
+            <button class="tab" data-panel="text">Text</button>
+        </div>
+
+        <div class="panel active" id="panel-sanitize">
+            <div class="field">
+                <label>Paste HTML:</label>
+                <textarea id="sanitize-input" placeholder="<p onclick='x'>Hello</p><script>bad</script>"></textarea>
+            </div>
+            <button class="submit" onclick="doSanitize()">Sanitize</button>
+            <div class="result" id="sanitize-result"></div>
+        </div>
+
+        <div class="panel" id="panel-parse">
+            <div class="field">
+                <label>Paste HTML:</label>
+                <textarea id="parse-input" placeholder="<html><body><p>Hello</p></body></html>"></textarea>
+            </div>
+            <button class="submit" onclick="doParse()">Parse</button>
+            <div class="result" id="parse-result"></div>
+        </div>
+
+        <div class="panel" id="panel-links">
+            <div class="field">
+                <label>Paste HTML:</label>
+                <textarea id="links-input" placeholder='<a href="/page">link</a>'></textarea>
+            </div>
+            <div class="field">
+                <label>Base URL (optional):</label>
+                <input type="text" id="links-base" placeholder="https://example.com/">
+            </div>
+            <button class="submit" onclick="doLinks()">Extract Links</button>
+            <div class="result" id="links-result"></div>
+        </div>
+
+        <div class="panel" id="panel-text">
+            <div class="field">
+                <label>Paste HTML:</label>
+                <textarea id="text-input" placeholder="<p>Hello <b>world</b></p>"></textarea>
+            </div>
+            <button class="submit" onclick="doText()">Extract Text</button>
+            <div class="result" id="text-result"></div>
+        </div>
+    </div>
+    <script>
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+            });
+        });
+
+        async function apiCall(endpoint, body) {
+            const resp = await fetch('/api/' + endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            return resp.json();
+        }
+
+        async function doSanitize() {
+            const html = document.getElementById('sanitize-input').value;
+            const res = await apiCall('sanitize', {html});
+            const el = document.getElementById('sanitize-result');
+            if (res.error) { el.innerHTML = '<span class="error">' + res.error + '</span>'; return; }
+            el.textContent = 'Removed: ' + res.removed_elements + ' elements, ' + res.removed_attrs + ' attrs, ' + res.removed_urls + ' URLs\n\n' + res.output;
+        }
+
+        async function doParse() {
+            const html = document.getElementById('parse-input').value;
+            const res = await apiCall('parse', {html});
+            const el = document.getElementById('parse-result');
+            if (res.error) { el.innerHTML = '<span class="error">' + res.error + '</span>'; return; }
+            el.textContent = JSON.stringify(res, null, 2);
+        }
+
+        async function doLinks() {
+            const html = document.getElementById('links-input').value;
+            const base_url = document.getElementById('links-base').value;
+            const res = await apiCall('links', {html, base_url});
+            const el = document.getElementById('links-result');
+            if (res.error) { el.innerHTML = '<span class="error">' + res.error + '</span>'; return; }
+            el.textContent = res.count + ' links found:\n\n' + res.links.map(l => l.tag + ' ' + l.class + ' ' + (l.resolved || l.href) + ' (' + l.text + ')').join('\n');
+        }
+
+        async function doText() {
+            const html = document.getElementById('text-input').value;
+            const res = await apiCall('text', {html});
+            const el = document.getElementById('text-result');
+            if (res.error) { el.innerHTML = '<span class="error">' + res.error + '</span>'; return; }
+            el.textContent = res.text;
+        }
+    </script>
+</body>
+</html>
