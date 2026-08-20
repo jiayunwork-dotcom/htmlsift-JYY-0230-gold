@@ -203,14 +203,21 @@ var HiddenTags = map[string]bool{
 // and then normalizes whitespace runs to single spaces.
 func VisibleText(d *Doc) string {
 	var sb strings.Builder
-	if d != nil && d.Root != nil {
-		_ = Walk(d.Root, func(n *html.Node) error {
-			if n.Type == html.TextNode {
-				sb.WriteString(n.Data)
+	var collect func(n *html.Node)
+	collect = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && HiddenTags[c.Data] {
+				continue
+			}
+			if c.Type == html.TextNode {
+				sb.WriteString(c.Data)
 				sb.WriteByte(' ')
 			}
-			return nil
-		})
+			collect(c)
+		}
+	}
+	if d != nil && d.Root != nil {
+		collect(d.Root)
 	}
 	return collapseSpace(sb.String())
 }
